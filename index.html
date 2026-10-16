@@ -1,0 +1,468 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>条件化选车判断卡 · 原型与数据审计</title>
+<meta name="description" content="基于汽车之家 162 个车系口碑页实测的产品分析：站内决策字段覆盖率、口径可信度审计，以及一个把结论绑定到可核对证据的选车判断原型。">
+<style>
+  :root{
+    --bg:#f5f6f8; --card:#fff; --line:#e3e6ea; --ink:#1c2024; --sub:#61696f;
+    --e1:#1f6feb; --e2:#1a7f37; --e3:#8a6d00; --e4:#6f42c1; --e5:#cf222e;
+    --warn:#fff4e5; --warnline:#f0c36d; --stop:#ffebe9; --stopline:#ffb8ae;
+    --ok:#eefaf1; --okline:#a8d5b5;
+  }
+  *{box-sizing:border-box}
+  html{-webkit-text-size-adjust:100%}
+  body{margin:0;background:var(--bg);color:var(--ink);
+    font:15px/1.7 -apple-system,"PingFang SC","Microsoft YaHei",sans-serif}
+  .wrap{max-width:960px;margin:0 auto;padding:26px 16px 72px}
+  header h1{font-size:23px;margin:0 0 6px;letter-spacing:.2px}
+  header .lede{margin:0 0 10px;color:var(--sub);font-size:14px}
+  .badges{display:flex;flex-wrap:wrap;gap:6px;margin-bottom:4px}
+  .badge{font-size:11.5px;padding:2px 8px;border-radius:11px;border:1px solid var(--line);
+    background:#fff;color:var(--sub)}
+  .badge.b{color:#0a6c2b;border-color:var(--okline);background:var(--ok)}
+  .card{background:var(--card);border:1px solid var(--line);border-radius:10px;
+    padding:17px 19px;margin-top:15px}
+  .card>h2{font-size:15px;margin:0 0 4px}
+  .card>.why{margin:0 0 13px;color:var(--sub);font-size:13px}
+  .grid{display:grid;grid-template-columns:repeat(auto-fit,minmax(215px,1fr));gap:12px}
+  label{display:block;font-size:12.5px;color:var(--sub);margin-bottom:5px}
+  select{width:100%;padding:8px 9px;border:1px solid var(--line);border-radius:6px;
+    background:#fff;font:inherit;color:var(--ink)}
+  .row{display:flex;gap:10px;flex-wrap:wrap;align-items:center;margin-top:14px}
+  button.act{padding:9px 17px;border-radius:6px;border:1px solid #1c2024;background:#1c2024;
+    color:#fff;font:inherit;font-size:14px;cursor:pointer}
+  button.act.ghost{background:#fff;color:#1c2024;border-color:var(--line)}
+  button.act:focus-visible,button.ev:focus-visible{outline:2px solid #1f6feb;outline-offset:2px}
+  .flow{display:flex;flex-wrap:wrap;gap:6px;align-items:center;font-size:12.5px;color:var(--sub)}
+  .node{padding:3px 8px;border:1px dashed var(--line);border-radius:5px;opacity:.45;transition:.25s}
+  .node.on{opacity:1;border-style:solid;background:#fff}
+  .tag{display:inline-block;padding:0 6px;border-radius:9px;font-size:10.5px;
+    border:1px solid var(--line);background:#fff;color:var(--sub);margin-left:5px}
+  .tag.rule{color:#0a6c2b;border-color:var(--okline);background:var(--ok)}
+  .tag.model{color:#7a3ff0;border-color:#d3c0f5;background:#f6f1ff}
+  .verdict{font-size:18px;font-weight:600;margin:0 0 3px}
+  .conf{font-size:12.5px;color:var(--sub);margin-bottom:12px}
+  .reason{border-top:1px solid var(--line);padding:12px 0}
+  .reason:first-of-type{border-top:none;padding-top:0}
+  .rt{font-weight:600;margin-bottom:4px;font-size:14.5px}
+  button.ev{display:inline-block;padding:1px 7px;border-radius:4px;font-size:11.5px;
+    border:1px solid;background:#fff;cursor:pointer;margin:2px 5px 2px 0;font-family:inherit}
+  .E1{color:var(--e1);border-color:#b6d4fd;background:#eef5ff}
+  .E2{color:var(--e2);border-color:var(--okline);background:var(--ok)}
+  .E3{color:var(--e3);border-color:#e6d08a;background:#fffaeb}
+  .E4{color:var(--e4);border-color:#d3c0f5;background:#f6f1ff}
+  .E5,.EX{color:var(--e5);border-color:#ffb8ae;background:var(--stop)}
+  .detail{margin:7px 0 3px;padding:10px 12px;background:#fafbfc;border:1px solid var(--line);
+    border-radius:6px;font-size:12.5px;color:#3a424b}
+  .detail[hidden]{display:none}
+  code{background:#eef1f4;padding:1px 5px;border-radius:3px;font-size:12px}
+  .stop{background:var(--stop);border:1px solid var(--stopline);border-radius:8px;padding:12px 14px;margin-top:11px}
+  .stop h3{margin:0 0 6px;font-size:13.5px;color:#9a1c12}
+  .ask{background:var(--warn);border:1px solid var(--warnline);border-radius:8px;padding:12px 14px;margin-top:11px}
+  .ask h3{margin:0 0 6px;font-size:13.5px;color:#8a5a00}
+  table{width:100%;border-collapse:collapse;font-size:13px;margin-top:8px}
+  th,td{border:1px solid var(--line);padding:6px 8px;text-align:left}
+  th{background:#fafbfc;font-weight:600;font-size:12.5px}
+  td.n{font-variant-numeric:tabular-nums}
+  .trap{display:grid;grid-template-columns:1fr 1fr;gap:12px;margin-top:10px}
+  .trap>div{border:1px solid var(--line);border-radius:8px;padding:11px 13px;background:#fcfdfe}
+  .trap h4{margin:0 0 8px;font-size:13px}
+  .trap h4.bad{color:#9a1c12}
+  .trap h4.good{color:#0a6c2b}
+  .trap ol{margin:0;padding-left:20px;font-size:12.5px}
+  .trap li{margin-bottom:4px}
+  .trap .ppl{color:var(--sub);font-size:11.5px}
+  .switch{display:inline-flex;border:1px solid var(--line);border-radius:7px;overflow:hidden}
+  .switch button{padding:7px 13px;border:0;background:#fff;font:inherit;font-size:13px;cursor:pointer;color:var(--ink)}
+  .switch button[aria-pressed="true"]{background:#1c2024;color:#fff}
+  .foot{color:var(--sub);font-size:12.5px;margin-top:18px;line-height:1.85}
+  .muted{color:var(--sub);font-size:12.5px}
+  a{color:#1f6feb}
+  @media(max-width:640px){.trap{grid-template-columns:1fr}.card{padding:15px 14px}}
+</style>
+</head>
+<body>
+<div class="wrap">
+<header>
+  <h1>条件化选车判断卡</h1>
+  <p class="lede">
+    一个产品分析原型：<b>不评测 AI 答得好不好，而是去查它要引用的数据长什么样。</b>
+    结论是站内数据「在，但判断不在」——所以这个原型把每条结论都绑到可核对的证据上，证据不够时它拒绝回答。
+  </p>
+  <div class="badges">
+    <span class="badge b">实测样本 162 个车系</span>
+    <span class="badge">数据截至 2026-10-17</span>
+    <span class="badge">两组样本：热门 34 + 目录系统抽样 128</span>
+    <span class="badge">纯前端规则演示，无后端、不调模型</span>
+  </div>
+</header>
+
+<!-- ================= 排序陷阱 ================= -->
+<section class="card">
+  <h2>① 先说最要命的一条：按口碑评分排序会排成什么样</h2>
+  <p class="why">
+    这是我实测里最意外的发现。汽车之家口碑页的评分字段 100% 存在，但
+    <b>94 个有评分的车系里，只有 13 个（14%）能查到"质量评价参与人数"</b>——
+    也就是说 <b>86% 的评分，你无法知道它是几个人给的</b>。
+  </p>
+  <div class="switch" role="group" aria-label="排序方式">
+    <button id="tNaive" aria-pressed="true" onclick="trap('naive')">按口碑评分排序</button>
+    <button id="tFixed" aria-pressed="false" onclick="trap('fixed')">屏蔽低样本评分后</button>
+  </div>
+  <div class="trap">
+    <div>
+      <h4 class="bad" id="tLeftTitle">评分前 8 名（不设门槛）</h4>
+      <ol id="tLeft"></ol>
+    </div>
+    <div>
+      <h4 class="good">屏蔽后前 10 名（参与人数 ≥ 30）</h4>
+      <ol id="tRight"></ol>
+    </div>
+  </div>
+  <p class="muted" style="margin-top:10px">
+    左列全是商务客车、皮卡、商用车和刚上市的新车型，且参与人数为「无」或 <b>1 人</b>；
+    右列立刻变回主流乘用车，评分区间也从 4.86–5.00 收窄到 4.39–4.57。
+    <b>评分最高的那批不是口碑最好，是没人评。</b>
+    一个用评分做排序的选车 AI，会系统性地把冷门车顶到主流车前面——而修它只需要一句「评价数 &lt; N 时不显示评分」。
+  </p>
+</section>
+
+<!-- ================= 条件 ================= -->
+<section class="card">
+  <h2>② 你的条件</h2>
+  <p class="why">原型用实测数据驱动。改任意条件，候选集、对比维度和结论都会变。</p>
+  <div class="grid">
+    <div><label for="budget">预算上限</label>
+      <select id="budget"><option value="7">7 万以内</option><option value="9" selected>9 万以内</option>
+        <option value="12">12 万以内</option><option value="26">26 万以内</option></select></div>
+    <div><label for="charge">充电条件</label>
+      <select id="charge"><option value="none" selected>没有家充桩</option><option value="have">能装家充桩</option>
+        <option value="careless">不在意</option></select></div>
+    <div><label for="kids">常坐几个人 / 有无儿童</label>
+      <select id="kids"><option value="none">1-2 人，无小孩</option><option value="one" selected>2 大人 + 1 个小孩</option>
+        <option value="two">2 大人 + 2 小孩</option><option value="three">常坐 5 人</option></select></div>
+    <div><label for="cargo">必须装下的东西</label>
+      <select id="cargo"><option value="none">没什么大件</option><option value="stroller" selected>婴儿车</option>
+        <option value="luggage">28 寸行李箱×2</option></select></div>
+    <div><label for="road">主要路况</label>
+      <select id="road"><option value="city" selected>市区通勤为主</option><option value="highway">经常跑长途/高速</option>
+        <option value="rough">山路烂路</option></select></div>
+    <div><label for="absurd">矛盾条件（故意选这个看它怎么拒答）</label>
+      <select id="absurd"><option value="no" selected>正常</option><option value="yes">预算 7 万但要行政级豪华轿车</option></select></div>
+  </div>
+  <div class="row">
+    <button class="act" id="go">生成判断</button>
+    <button class="act ghost" id="fill">填入示例条件</button>
+    <span class="muted" id="round"></span>
+  </div>
+</section>
+
+<section class="card">
+  <h2>③ 处理链路</h2>
+  <p class="why">七个节点里只有 ⑦ 必须用大模型生成，② 可选。<b>结论本身不是模型生成的。</b></p>
+  <div class="flow" id="flow"></div>
+</section>
+
+<section class="card" id="out" style="display:none" aria-live="polite">
+  <h2>④ 判断结果</h2>
+  <div id="body"></div>
+</section>
+
+<!-- ================= 数据底座 ================= -->
+<section class="card">
+  <h2>⑤ 数据底座实测：AI 能引用什么，不能引用什么</h2>
+  <p class="why">
+    第一组 34 个是我自己挑的热门车，第二组 128 个是从汽车之家车系树接口（5779 车系 → 在售 1693 →
+    按品牌字母序每 13 取 1）做的系统抽样。<b>第二组才是覆盖率的准绳——第一组在替我说好话。</b>
+  </p>
+  <table>
+    <thead><tr><th>决策字段</th><th>热门组 n=34</th><th>目录组 n=128</th><th>差值</th></tr></thead>
+    <tbody>
+      <tr><td>优缺点标签云（带提及人数）</td><td class="n">94%</td><td class="n">60%</td><td class="n">−34pp</td></tr>
+      <tr><td>质量评价参与人数</td><td class="n">65%</td><td class="n">34%</td><td class="n">−30pp</td></tr>
+      <tr><td>口碑评分</td><td class="n">100%</td><td class="n">73%</td><td class="n">−27pp</td></tr>
+      <tr><td>百车故障数</td><td class="n">35%</td><td class="n"><b>10%</b></td><td class="n">−25pp</td></tr>
+      <tr><td>选车热度</td><td class="n">94%</td><td class="n">77%</td><td class="n">−17pp</td></tr>
+      <tr><td>厂商指导价</td><td class="n">91%</td><td class="n">75%</td><td class="n">−16pp</td></tr>
+      <tr><td>二手车价格</td><td class="n">79%</td><td class="n">66%</td><td class="n">−13pp</td></tr>
+      <tr><td>维度评价有分值</td><td class="n">0%</td><td class="n"><b>0%</b></td><td class="n">±0</td></tr>
+    </tbody>
+  </table>
+  <p class="muted" style="margin-top:10px">
+    <b>八个字段里七个在无偏样本上显著更差（13–34 个百分点）。</b>
+    站内数据覆盖与车型热度强相关：热门车尚可，长尾基本是空的。
+    同一个模型在热门车系能给出有依据的判断，在长尾只能靠编——而用户不会告诉你他问的是哪类。
+  </p>
+  <table style="margin-top:14px">
+    <thead><tr><th>字段有值，但口径不可信</th><th>新车指导价</th><th>页面给的二手车区间</th><th>下界/新车</th></tr></thead>
+    <tbody>
+      <tr><td>沃尔沃XC90</td><td class="n">63.89-78.19万</td><td class="n"><b>2.58-37.98万</b></td><td class="n">4%</td></tr>
+      <tr><td>标致508</td><td class="n">16.37-19.47万</td><td class="n"><b>0.88-10.43万</b></td><td class="n">5%</td></tr>
+      <tr><td>奔驰E级</td><td class="n">37.88-50.98万</td><td class="n"><b>1.98-38.70万</b></td><td class="n">5%</td></tr>
+      <tr><td>保时捷Panamera</td><td class="n">99.80-149.80万</td><td class="n">7.98-117.00万</td><td class="n">8%</td></tr>
+    </tbody>
+  </table>
+  <p class="muted" style="margin-top:8px">
+    两组复现率 42% / 44%——不是热门车特例，是系统性的字段语义问题。
+    <b>一个有值但错口的字段，会绕过所有针对幻觉的防护</b>：数据缺失时 AI 至少能说「查不到」，
+    而字段有值、语义却不对时，用户会拿那个数字当结论用。
+  </p>
+</section>
+
+<p class="foot">
+  <b>证据分级</b>（点击判断卡里的标签可展开原始数据）：<br>
+  <span class="ev E1" style="cursor:default">E1 官方参数</span>
+  <span class="ev E2" style="cursor:default">E2 结构化质量数据</span>
+  <span class="ev E3" style="cursor:default">E3 口碑提及（带人数）</span>
+  <span class="ev E4" style="cursor:default">E4 口碑原文</span>
+  <span class="ev E5" style="cursor:default">E5 模型推断（禁止作主证据）</span>
+  <span class="ev EX" style="cursor:default">EX 口径不可信（不入证据池）</span>
+  <br>
+  <b>E2 的 30 人门槛不是拍的。</b>热门组「有数据最低 31 人 / 无数据最高 28 人」，
+  目录组「最低 34 / 最高 26」——两组独立样本都干净分开，交集收敛到 [27,33]。
+  平台自己已经用 30 人决定这个数据<b>显不显示</b>，但没用它决定这个数据<b>能不能拿去排名次</b>；
+  本原型把同一个门槛从「显示开关」升级成「比较资格」：<b>过线也不给名次，只给数值 + 样本量 + 数据时点。</b>
+</p>
+
+<section class="card">
+  <h2>方法与局限（这部分比结论重要）</h2>
+  <p class="muted" style="margin-top:0">
+    <b>怎么测的</b>：无头 Chrome 执行 JS 后 <code>--dump-dom</code> 渲染 <code>k.autohome.com.cn/{车系ID}/</code>，
+    解析服务端与客户端加载后的正文文本，按字段标签定位取值。无需登录。
+    复现：<code>python tools/crawl_autohome_fields.py report</code> / <code>compare</code>。<br><br>
+    <b>我在这份分析里推翻过自己四次</b>，原样记录在报告第 6 节：
+    ① 把「参与人数不足」误读成「车太新」（思域卖了十几年同样没数据）；
+    ② 断言二手车价格全空，其实是我只抓了服务端 HTML、该字段是客户端加载的；
+    ③ 说维度评价「全是 --」，机制错了——32/34 连区块都不渲染；
+    ④ 用 34 个自己挑的热门车算覆盖率，被样本偏差替说了好话。<br><br>
+    <b>仍然存在的局限</b>：渲染等待窗口 6 秒，加载更慢的字段仍会漏，所以所有覆盖率应读作「该窗口内的下界」；
+    抓取脚本字段窗口固定 24 字符，长价格会串字段（受影响行的指导价不可信，二手车区间与比值仍可用）；
+    字母序等距抽样消除了「挑热门车」的偏差，但引入了品牌分布偏差；
+    「30 人门槛」是从 43 个样本反推的，不是平台官方口径；
+    单时点快照，而这些数字 30 分钟就会变（星愿百车故障数在两次采集间从 100 变为 93，参与人数 123→118）。<br><br>
+    <b>性质声明</b>：本页面是纯前端规则演示，用于展示产品判断逻辑；数据是真实采集的，
+    但候选召回、维度选择、证据降级等逻辑是按 PRD 实现的模拟，<b>不是已上线的产品</b>。
+    所有外部数据来自公开页面，仅供学习与产品分析用途，与厂商官方口径无关。
+  </p>
+</section>
+</div>
+
+<script>
+/* ===== 真实数据：2026-10-17 汽车之家 k.autohome.com.cn 口碑页实测 ===== */
+const TRAP_NAIVE = [
+  ['宇通T7', 5.00, null, '商务客车 38.98-128.80万'],
+  ['锐胜M8新能源', 4.86, null, '15.98-27.98万'],
+  ['猎光e:NS2', 4.86, 1, '本田合资新车型 18.98-20.98万'],
+  ['长安F70蓝鲸', 4.86, null, '皮卡 8.99-11.99万'],
+  ['跨越星V7 EV', 4.86, null, '商用车 7.79-16.58万'],
+  ['上汽大通MAXUS V90房车', 4.75, null, '房车 27.98-43.98万'],
+  ['羿', 4.71, null, '11.88-19.98万'],
+  ['Levante', 4.71, 1, '玛莎拉蒂 86.68-118.98万']
+];
+const TRAP_FIXED = [
+  ['岚图知音', 4.57, 114, 115], ['阿维塔06', 4.53, 73, 90], ['魏牌高山新能源', 4.53, 92, 43],
+  ['风云T9', 4.51, 94, 185], ['速腾', 4.50, 74, 111], ['博越L', 4.49, 76, 111],
+  ['零跑B10', 4.49, 86, 84], ['小鹏MONA M03', 4.45, 34, 94], ['海鸥', 4.43, 44, 139],
+  ['海狮06', 4.39, 63, 54]
+];
+const CARS = {
+  '星愿':      {price:[6.48,9.48], hot:109, score:4.59, fault:93, sample:118,
+    top:['前门-不易开启/关闭 16 例','风噪声过大 9 例','后门-不易开启/关闭 9 例'],
+    plus:{'转向轻重合适':84,'储物空间设计合理':52,'车身小巧':52,'维修保养便宜':42,'悬架减震舒适':38},
+    minus:{'车机不好':19,'续航里程短':16,'胎噪大':16,'风噪大':15,'刹车不灵敏':6}},
+  '零跑A10':   {price:[6.58,8.68], hot:98, score:4.56, fault:null, sample:0,
+    top:['OTA软件升级问题 4 例','导航地图错误 3 例','主动刹车过于灵敏 3 例'],
+    plus:{'储物空间设计合理':79,'转向轻重合适':64,'座椅舒服':48,'内饰材质好':46,'电耗低':21},
+    minus:{'悬架减震不舒适':57,'后排没有出风口':46,'风噪大':36,'胎噪大':31,'没有座椅通风':22}},
+  'QQ3 EV':    {price:[5.89,8.89], hot:78, score:4.54, fault:null, sample:0,
+    top:['空调冷风不够快 3 例','前风挡除雾故障 2 例','刹车时异响 1 例'],
+    plus:{'后排空间够用':249,'车身小巧':233,'方向盘轻重合理':223,'悬架减震舒适':181,'表显续航精准':10},
+    minus:{'胎噪大':150,'内饰材质不好':150,'风噪大':136,'高速续航小':22,'车头灯亮度小':14}},
+  '缤果Pro':   {price:[5.68,7.08], hot:62, score:4.51, fault:null, sample:0,
+    top:['语音识别误解 1 例','风噪声过大 1 例','胎噪声过大 1 例','空调冷风不够快 1 例','车载Wi-Fi故障 1 例'],
+    plus:{'方向盘轻重合理':82,'储物空间设计合理':73,'维修保养便宜':51,'续航里程长':45},
+    minus:{'胎噪大':59,'悬架减震不舒适':50,'内饰材质不好':35,'电耗大':13,'充电速度慢':5}},
+  '海鸥':      {price:[6.98,8.59], hot:62, score:4.43, fault:139, sample:44,
+    top:['胎噪声过大 10 例','风噪声过大 9 例','窗户易起雾 3 例','鼓风机噪音过大 3 例'],
+    plus:{'转向轻重合理':220,'车身小巧':197,'有终身质保':143,'储物空间设计合理':127,'快充速度快':126},
+    minus:{'悬架减震不舒适':162,'后备厢空间小':144,'内饰材质不好':106,'续航里程短':38,'底盘太低':33}},
+  '启源Q05':   {price:[7.99,11.49], hot:93, score:4.46, fault:167, sample:42,
+    top:['胎噪声过大 5 例','风噪声过大 5 例','行驶中车跑偏 4 例','鸣笛喇叭操作费力 3 例'],
+    plus:{'后备厢空间宽敞':52,'座椅舒适':48,'加速强劲':38,'内饰材质给力':38,'方向盘轻重合适':37},
+    minus:{'续航里程短':41,'风噪大':37,'胎噪大':36,'转向稳定性差':13,'电耗大':13}},
+  'AION UT':   {price:[6.98,10.18], hot:59, score:4.58, fault:null, sample:0,
+    top:['胎噪声过大 6 例','车子底部有异响 3 例','风噪声过大 3 例'],
+    plus:{'续航里程长':116,'后排空间够用':103,'座椅舒服':87,'转向轻重合适':85,'加速强劲':73},
+    minus:{'胎噪大':45,'悬架减震不舒适':44,'风噪大':41,'内饰异味大':35,'后排没有出风口':7}},
+  '凯美瑞':    {price:[17.18,25.98], hot:122, score:4.43, fault:123, sample:70,
+    top:['胎噪声过大 11 例','风噪声过大 10 例','发动机噪音过大 4 例'],
+    plus:{'油耗低':72,'换挡平顺':39,'后排空间足够':22,'行驶稳定性不错':18,'维修保养便宜':16},
+    minus:{'内饰材质不好':21,'加速慢':15,'胎噪大':15,'方向盘有虚位':8,'高速动力肉':5}}
+};
+const NODES = [['① 约束解析','rule'],['② 缺槽追问','model'],['③ 重建候选集','rule'],
+  ['④ 动态选维度','rule'],['⑤ 拉取四类证据','rule'],['⑥ 判断引擎','rule'],['⑦ 组织语言','model']];
+let askRound = 0, asked = false;
+
+/* ---------- 排序陷阱模块 ---------- */
+function trap(mode){
+  document.getElementById('tNaive').setAttribute('aria-pressed', mode==='naive');
+  document.getElementById('tFixed').setAttribute('aria-pressed', mode==='fixed');
+  const L=document.getElementById('tLeft'), R=document.getElementById('tRight');
+  if(mode==='naive'){
+    document.getElementById('tLeftTitle').textContent='评分前 8 名（不设门槛）';
+    L.innerHTML = TRAP_NAIVE.map(x=>`<li><b>${x[0]}</b> ${x[1].toFixed(2)}
+      <span class="ppl">· ${x[2]===null?'参与人数 无':'参与人数 '+x[2]+' 人'} · ${x[3]}</span></li>`).join('');
+    L.style.opacity=1;
+  } else {
+    document.getElementById('tLeftTitle').textContent='同一批数据，屏蔽低样本后它们全部消失';
+    L.innerHTML = TRAP_NAIVE.map(x=>`<li style="opacity:.45;text-decoration:line-through">${x[0]} ${x[1].toFixed(2)}</li>`).join('');
+  }
+  R.innerHTML = TRAP_FIXED.map(x=>`<li><b>${x[0]}</b> ${x[1].toFixed(2)}
+    <span class="ppl">· ${x[2]} 人参与 · 百车故障数 ${x[3]}</span></li>`).join('');
+}
+trap('naive');
+
+/* ---------- 判断卡 ---------- */
+function flow(on){ const f=document.getElementById('flow'); f.innerHTML='';
+  NODES.forEach((n,i)=>{ const d=document.createElement('span'); d.className='node'+(on.includes(i)?' on':'');
+    d.textContent=n[0]; const t=document.createElement('span'); t.className='tag '+n[1]; t.textContent=n[1]==='rule'?'规则':'模型';
+    d.appendChild(t); f.appendChild(d); if(i<NODES.length-1){const a=document.createElement('span');a.textContent='→';f.appendChild(a);} });
+}
+let evSeq=0;
+function ev(level, txt, detail){
+  const id='e'+(++evSeq);
+  return `<button class="ev ${level}" aria-expanded="false" aria-controls="${id}"
+    onclick="const d=document.getElementById('${id}');d.hidden=!d.hidden;this.setAttribute('aria-expanded',String(!d.hidden))">${level} ${txt}</button>
+    <div class="detail" id="${id}" hidden>${detail}</div>`;
+}
+function candidates(budget){ return Object.entries(CARS).filter(([,c])=>c.price[0] <= budget).map(([n,c])=>({n,...c})); }
+
+function main(){
+  const budget=+document.getElementById('budget').value,
+        charge=document.getElementById('charge').value,
+        kids=document.getElementById('kids').value,
+        cargo=document.getElementById('cargo').value,
+        road=document.getElementById('road').value,
+        absurd=document.getElementById('absurd').value;
+  document.getElementById('out').style.display='block';
+  const body=document.getElementById('body');
+
+  if(absurd==='yes'){
+    flow([0,5]);
+    body.innerHTML=`<div class="stop"><h3>这两个条件在站内车型库里没有交集，我不硬推</h3>
+      <div>「预算 7 万以内」能召回的车型：${Object.entries(CARS).filter(([,c])=>c.price[0]<=7).map(([n])=>n).join('、')}。<br>
+      它们全部是 A00/A0 级小车，与「行政级豪华轿车」在轴距、动力级别、后排规格上不是同一类产品。</div>
+      <div style="margin-top:8px"><b>松绑建议（选一个）：</b>
+      ① 预算提到 17 万以上，可看的车型才进入 B 级区间；② 放弃「行政级」，改为「后排尽量大」，那么 7 万内 <b>QQ3 EV</b> 的「后排空间够用」有 <b>249 人</b>提及，是同类里信号最强的。</div></div>`;
+    return;
+  }
+  if(!asked && (charge==='none' && road==='highway')){
+    flow([0,1]); askRound++;
+    document.getElementById('round').textContent='第 '+askRound+' 轮追问（最多 2 轮）';
+    body.innerHTML=`<div class="ask"><h3>先问一件事：没有家充桩还经常跑长途，这个组合我需要确认</h3>
+      <div>站内<b>没有</b>「无家充条件下长途补能体验」的结构化数据（这是审计里 Q1 类空白），
+      所以这个约束会直接影响我推荐纯电还是插混，而目前候选集里只有启源Q05 是插混。</div>
+      <div style="margin-top:9px"><label for="trip">你单程最长大概跑多远？</label>
+        <select id="trip"><option value="s">50 公里内</option><option value="m">100-200 公里</option><option value="l">经常 300 公里以上</option></select></div>
+      <div class="row"><button class="act" id="ans">回答并继续</button>
+        <button class="act ghost" id="skip">跳过，让我看低置信结果</button></div></div>`;
+    document.getElementById('ans').onclick=()=>{asked=true;main();};
+    document.getElementById('skip').onclick=()=>{asked=true;window.__lowconf=true;main();};
+    return;
+  }
+  let cs=candidates(budget);
+  if(cargo==='stroller'||kids!=='none'){ cs=cs.filter(c=>!c.minus['后备厢空间小'] || c.minus['后备厢空间小']<150); }
+  cs.sort((a,b)=>b.hot-a.hot);
+  const dims = charge==='none' ? ['补能与续航真实性','后排与装载','通病风险'] :
+               cargo==='stroller' ? ['后排与装载','通病风险','NVH'] : ['续航达成','通病风险','NVH'];
+  flow([0,2,3,4,5,6]);
+  const top=cs[0], alt=cs[1];
+  const conf = window.__lowconf ? '低' : (top && top.sample>=30 ? '中' : '中低');
+  let html=`<p class="verdict">${cs.length>1?`建议优先看：${top.n}　·　备选：${alt.n}`:`只召回了 ${top.n}`}</p>
+    <p class="conf">置信度：<b>${conf}</b>　·　召回 ${cs.length} 台（预算 ${budget} 万内按选车热度排序）　·　对比维度按你的条件动态选择为：<b>${dims.join(' / ')}</b>
+    <br><span class="muted">对比维度没有用平台预设的那组（星愿页面上给的是「外观 4.77 vs 性价比 4.76」），因为你没问外观。</span></p>`;
+
+  html+=`<div class="reason"><div class="rt">1. 后排与装载</div>`;
+  cs.slice(0,3).forEach(c=>{
+    const key = c.n==='QQ3 EV'?'后排空间够用':(c.n==='启源Q05'?'后备厢空间宽敞':'储物空间设计合理');
+    const n=c.plus[key]||0;
+    html+=`<div>· <b>${c.n}</b>：「${key}」<b>${n}</b> 人提及 ${ev('E3',key+' '+n+'人',
+      `来源：<code>k.autohome.com.cn</code> 口碑页标签云，实测于 2026-10-17。E3 级证据只能作辅助，不能单独支撑排序；正负标签必须并列展示。`)}</div>`;
+    if(c.minus['后备厢空间小']) html+=`<div class="muted">　　但「后备厢空间小」${c.minus['后备厢空间小']} 人提及 ${ev('E3','注意反向信号',
+      `海鸥页面把「后备厢空间小 144 人」归在了优点列（原文如此），属标签归类错误。引用前需人工核对——这正是「矛盾字段拦截」要挡的东西。`)}</div>`;
+  });
+  html+=`</div>`;
+
+  html+=`<div class="reason"><div class="rt">2. 通病风险（E2 结构化质量数据）</div>`;
+  cs.slice(0,3).forEach(c=>{
+    if(c.sample>=30){
+      html+=`<div>· <b>${c.n}</b>：百车故障数 <b>${c.fault}</b>（${c.sample} 人参与，数据截至 2026-10-17） ${ev('E2','故障TOP5',
+        `实测原文：${c.top.join('；')}。百车故障数 = 每 100 台车的故障报告数，越低越好。样本 ${c.sample} 人 ≥ 门槛 30，可作主证据，但<b>不得输出名次</b>。`)}</div>`;
+    } else {
+      html+=`<div>· <b>${c.n}</b>：<span style="color:var(--e5)">质量数据参与人数不足</span> ${ev('E2→E3','自动降级',
+        `实测原文：${c.top.join('；')}——这些数字全部是个位数（缤果Pro 的 TOP5 每项只有 1 例）。
+        <b>1 个人的投诉不足以说明「这车最容易出的问题是车载 Wi-Fi 故障」</b>，按门槛规则降级为 E3，不得用于排序。`)}</div>`;
+    }
+  });
+  const noFault=cs.filter(c=>c.sample<30).map(c=>c.n);
+  const ok=cs.slice(0,3).filter(c=>c.sample>=30);
+  if(ok.length>=2){
+    const mx=Math.max(...ok.map(c=>c.sample)), mn=Math.min(...ok.map(c=>c.sample));
+    if(mx/mn>=2){
+      const a=ok.find(c=>c.sample===mx), b=ok.find(c=>c.sample===mn);
+      html+=`<div class="ask" style="margin-top:9px"><h3>这两个数不能排名，只能分别陈述</h3>
+        <div>${a.n} 的百车故障数 ${a.fault}（${a.sample} 人参与）与 ${b.n} 的 ${b.fault}（${b.sample} 人参与），<b>参与人数相差 ${(mx/mn).toFixed(1)} 倍</b>。
+        ${b.sample<50?`${b.n} 只有 ${b.sample} 人，按这个样本量算出的指数，抽样波动就能盖过两车之间的差距`:'两者样本量不在一个量级'}。
+        汽车之家页面上确实存在「热门对比车系质量排行」这种名次展示（页面原文：星愿 100/123 人 排第 1，元UP <b>178/36 人</b> 排第 2；
+        而同一页面 30 分钟后重测，星愿已变为 93/118 人），<b>本原型按 PRD 规则拒绝输出任何名次。</b></div></div>`;
+    }
+  }
+  if(noFault.length) html+=`<div class="stop" style="margin-top:9px"><h3>这一项我判不了</h3>
+    <div>${noFault.join('、')} 在站内没有达标的故障统计（参与人数不足 30 人）。
+    <b>不是我不愿意判，是证据不够。</b>建议：到车系论坛搜「提车 3 个月 问题」，或看口碑原文里的具体描述。</div></div>`;
+  html+=`</div>`;
+
+  if(charge==='none'){
+    html+=`<div class="reason"><div class="rt">3. 没有家充桩的实际用车成本</div>
+      <div>站内<b>没有</b>这个维度的结构化数据 ${ev('E5','此处禁止生成',
+      `如果让模型补位，它会生成一段「公共充电比较麻烦」的常识性文字，看起来像结论但没有任何站内依据。
+      按设计，这里必须留白并给出下一步路径，而不是生成。`)}</div>
+      <div class="muted" style="margin-top:5px">能给你的替代信息：星愿「续航里程短」16 人 / 海鸥 38 人 / 启源Q05 41 人 / AION UT「续航里程长」116 人 / 缤果Pro 45 人。<b>这是主观感受，不是达成率。</b></div></div>`;
+  }
+  html+=`<div class="reason"><div class="rt">4. NVH（胎噪/风噪，你市区通勤权重较低，仅提示）</div>`;
+  cs.slice(0,3).forEach(c=>{
+    const t=(c.minus['胎噪大']||0)+(c.minus['风噪大']||0);
+    html+=`<div>· <b>${c.n}</b>：胎噪+风噪合计 <b>${t}</b> 人提及 ${ev('E3','NVH 提及人数',
+      `胎噪大 ${c.minus['胎噪大']||0} 人、风噪大 ${c.minus['风噪大']||0} 人，实测标签云原文相加，未去重。
+      <b>注意：</b>胎噪/风噪在 12 个有质量数据的车系的故障榜里几乎都占前两名——一个指标在所有车型上都第一，
+      说明的更可能是「这一项最容易顺手勾选」，而不是「所有车都有同一个毛病」。`)}</div>`;
+  });
+  html+=`</div>`;
+
+  html+=`<div class="stop"><h3>我不会替你决定的</h3>
+    <div><b>婴儿车能不能放进这两款车的后备厢</b> —— 站内只有「后备厢空间小/宽敞」这类主观标签，
+    没有后备厢进深、开口宽度的可比数值。请带着婴儿车去店里实测，或到车系论坛发帖问已购车主。</div>
+    <div style="margin-top:6px"><b>三年后残值</b> —— 站内「二手车价格」字段有值但口径不可信：
+    可对比车系里 42%–44% 的区间下界低于新车起售价的 40%。例：奔驰E级新车 37.88-50.98 万，页面给 <code>1.98-38.70万</code>；
+    Panamera 新车 99.80 万起，页面给 <code>7.98-117.00万</code>。
+    ${ev('EX','口径不可信，不入证据池','这一层是新增的：五级分类只能回答「证据强不强」，回答不了「这个字段是不是在说它看起来在说的那件事」。一个有值但错口的字段，会绕过所有针对幻觉的防护。')}</div></div>`;
+
+  html+=`<p class="muted" style="margin-top:14px">本次会话共引用证据 <span id="evcount">—</span> 条，全部可点开核对原始数据；无一条来自模型推断（E5 仅用于标记「此处禁止生成」）。</p>`;
+  body.innerHTML=html;
+  const used=[...body.querySelectorAll('.ev')].filter(e=>!e.classList.contains('E5')&&!e.classList.contains('EX')).length;
+  document.getElementById('evcount').textContent=used;
+  document.getElementById('round').textContent = askRound? '已完成 '+askRound+' 轮追问':'';
+}
+document.getElementById('go').onclick=()=>{asked=false;askRound=0;window.__lowconf=false;main();};
+document.getElementById('fill').onclick=()=>{
+  document.getElementById('budget').value='9';document.getElementById('charge').value='none';
+  document.getElementById('kids').value='one';document.getElementById('cargo').value='stroller';
+  document.getElementById('road').value='city';document.getElementById('absurd').value='no';
+  asked=false;askRound=0;window.__lowconf=false;main();};
+flow([]);
+</script>
+</body>
+</html>

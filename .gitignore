@@ -1,0 +1,9 @@
+# 缓存与临时
+__pycache__/
+.chrome-tmp/
+*.pyc
+
+# 本地工具产物
+probe.log
+progress.log
+.DS_Store
